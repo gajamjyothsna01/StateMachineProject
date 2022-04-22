@@ -37,7 +37,7 @@ public class State
     public Animator animator;
     public Transform playerPosition;
     public State nextState;
-    float visualDistance, visualAngle, shootingDistance;
+    float visualDistance = 10f, visualAngle=30f, shootingDistance=5f;
 
     public State(GameObject _npc, NavMeshAgent _agent, Animator _animator, Transform _playerPosition)
     {
@@ -83,7 +83,26 @@ public class State
         }
         return this;
     }
+    public bool CanSeePlayer()
+    {
+        Vector3 direction = playerPosition.position - npc.transform.position;
+        float angle = Vector3.Angle(direction, npc.transform.forward);
+        if(direction.magnitude < visualDistance && direction.magnitude < visualAngle)
+        {
+            return true;
+        }
+        return false;
+    }
 
+    public bool EnemyCanAttackPlayer()
+    {
+        Vector3 direction = playerPosition.position - npc.transform.position;
+        if(direction.magnitude <  shootingDistance)
+        {
+            return true;
+        }
+        return false;
+    }
 }
 public class Idle : State
 {
@@ -98,12 +117,17 @@ public class Idle : State
     }
     public override void UpdateMethod()
     {
-        if(Random.Range(0,100) < 5)
+        if(CanSeePlayer())
+        {
+            nextState = new Chase(npc,agent,animator, playerPosition);
+            eventsState = EVENTS.EXIT;
+        }
+        if(Random.Range(0,100) < 10f)
         {
             nextState = new Patrol(npc,agent, animator, playerPosition );
             eventsState = EVENTS.EXIT;
         }
-       base.UpdateMethod();
+      // base.UpdateMethod();
     }
     public override void ExitMethod()
     {
@@ -124,7 +148,7 @@ public class Patrol : State
     public override void EnterMethod()
     {
         animator.SetTrigger("isWalking");
-        currentIndex = 0;
+        //currentIndex = 0;
         base.EnterMethod();
     }
     public override void UpdateMethod()
@@ -133,7 +157,7 @@ public class Patrol : State
         {
             if(currentIndex >= GameController.Instance.CheckPoints.Count)
             {
-                //currentIndex = 0;
+                currentIndex = 0;
 
             }
             else
@@ -147,9 +171,127 @@ public class Patrol : State
     }
     public override void ExitMethod()
     {
-        animator.ResetTrigger("isIdle");
+        animator.ResetTrigger("isWalking");
 
         base.ExitMethod();
     }
 
+}
+public class Chase : State
+{
+    public Chase(GameObject _npc, NavMeshAgent _agent, Animator _animator, Transform _playerPosition) : base(_npc, _agent, _animator, _playerPosition)
+    {
+        stateName = STATE.CHASE;
+        agent.speed = 5f;
+        agent.isStopped = false;
+
+    }
+    public override void EnterMethod()
+    {
+        animator.SetTrigger("isRunning");
+        //currentIndex = 0;
+        base.EnterMethod();
+    }
+    public override void UpdateMethod()
+    {
+        agent.SetDestination(playerPosition.position);
+        if(agent.hasPath)
+        {
+            if(EnemyCanAttackPlayer())
+            {
+                nextState = new Attack(npc, agent, animator, playerPosition);
+                eventsState = EVENTS.EXIT;
+            }
+            else if(!CanSeePlayer())
+            {
+                nextState = new Patrol(npc, agent, animator, playerPosition);
+                eventsState= EVENTS.EXIT; 
+            }
+
+        }
+        
+    }
+    public override void ExitMethod()
+    {
+        animator.ResetTrigger("isRunning");
+
+        base.ExitMethod();
+    }
+
+}
+public class Attack : State
+{
+    float roatationSpeed = 5;
+    public Attack(GameObject _npc, NavMeshAgent _agent, Animator _animator, Transform _playerPosition) : base(_npc, _agent, _animator, _playerPosition)
+    {
+        stateName =STATE.ATTACK;
+    }
+    public override void EnterMethod()
+    {
+        animator.SetTrigger("isShooting");
+        agent.isStopped = true;
+        //currentIndex = 0;
+        base.EnterMethod();
+    }
+    public override void UpdateMethod()
+    {
+        Vector3 direction = playerPosition.position - npc.transform.position;
+        float angle = Vector3.Angle(direction,npc.transform.forward);
+        direction.y = 0;
+        npc.transform.rotation = Quaternion.Slerp(npc.transform.rotation, Quaternion.LookRotation(direction), roatationSpeed * Time.deltaTime);
+        if(!EnemyCanAttackPlayer())
+        {
+            nextState = new Idle(npc, agent, animator, playerPosition);
+            eventsState = EVENTS.EXIT;
+        }
+        if(!CanSeePlayer())
+        {
+            nextState = new Death(npc, agent, animator, playerPosition);
+            eventsState = EVENTS.EXIT;
+        }
+
+        if(EnemyCanAttackPlayer())
+        {
+            nextState = new Death(npc, agent, animator, playerPosition);
+            eventsState = EVENTS.EXIT;
+
+        }
+
+    }
+    public override void ExitMethod()
+    {
+        animator.ResetTrigger("isShooting");
+        nextState = new Death(npc, agent, animator, playerPosition);
+
+        base.ExitMethod();
+    }
+
+}
+public class Death : State
+{
+    public Death(GameObject _npc, NavMeshAgent _agent, Animator _animator, Transform _playerPosition) : base(_npc, _agent, _animator, _playerPosition)
+    {
+        stateName = STATE.DEATH;
+    }
+    public override void EnterMethod()
+    {
+        animator.SetTrigger("isSleeping");
+       
+        //currentIndex = 0;
+        base.EnterMethod();
+    }
+    public override void UpdateMethod()
+    {
+        
+
+
+
+    }
+    public override void ExitMethod()
+    {
+        animator.ResetTrigger("isSleeping");
+       // nextState = new Death(npc, agent, animator, playerPosition);
+
+        base.ExitMethod();
+    }
 }
